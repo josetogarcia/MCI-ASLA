@@ -21,15 +21,19 @@ dat$se_calc <- ifelse(
 m_overall <- rma(yi = auc, sei = se_calc, data = dat, method = "DL")
 
 ## --- Orden y filas para el forest plot con subgrupos ---
-# Categorías con >=2 estudios se pooled (diamante azul); con 1 estudio
-# (Metarugcheep_2022: phonemic fluency; Wang_2023: motor/DDK) se muestran
-# solas, sin diamante -- exactamente lo que dice el pie de figura.
-task_order <- c("Free speech", "Incluye descripcion", "phonemic fluency", "motor/DDK")
+# Categorías con >=2 estudios se pooled (diamante azul); con 1 estudio se
+# muestran solas, sin diamante. El orden de las categorías (y sus nombres)
+# se toma directo de los datos -- NO se hardcodea ningún string de
+# task_group, para no depender de que coincida tildes/mayúsculas/espacios
+# con lo que uno supone que dice el CSV.
+cat("Categorías de task_group encontradas:\n")
+print(table(dat$task_group, useNA = "ifany"))
+
+n_by_group    <- sort(table(dat$task_group), decreasing = TRUE)  # grupos grandes primero
+task_order    <- names(n_by_group)
+pooled_groups <- names(n_by_group[n_by_group >= 2])
 dat$task_group <- factor(dat$task_group, levels = task_order)
 dat <- dat[order(dat$task_group), ]
-
-n_by_group    <- table(dat$task_group)
-pooled_groups <- names(n_by_group[n_by_group >= 2])
 
 # Recorre las categorías EN task_order (de arriba hacia abajo en la figura),
 # asignando filas con un contador que solo baja -- así el diamante de cada
@@ -56,6 +60,14 @@ for (g in task_order) {
     row_ptr <- row_ptr - 1
   }
   row_ptr <- row_ptr - 1               # hueco antes de la siguiente categoría
+}
+
+# Si dos estudios terminaron con la misma fila (p.ej. por un NA en task_group
+# que no debería existir), mejor fallar acá con un mensaje claro que seguir
+# y graficar dos labels superpuestos en silencio.
+if (anyDuplicated(rows) > 0) {
+  stop("Filas duplicadas en 'rows' -- revisa 'table(dat$task_group, useNA=\"ifany\")' arriba: ",
+       "algún estudio puede tener NA o un valor de task_group inesperado.")
 }
 
 overall_row <- min(rows) - 3  # separado del resto, debajo de todas las categorías
