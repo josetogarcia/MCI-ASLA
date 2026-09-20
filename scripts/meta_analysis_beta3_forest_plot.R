@@ -12,29 +12,39 @@ stopifnot(nrow(dat) == 2)
 print(dat[, c("study", "modality", "n_total", "auc", "ci_lower", "ci_upper")])
 
 ## --- Figure S3 ---
-## Cuadrados = F1 por estudio; Mirheidari no tiene CI reportado ("n.r."), por lo
-## que su fila queda sin barra de intervalo (ci_lower/ci_upper = NA).
-forest(dat$auc, ci.lb = dat$ci_lower, ci.ub = dat$ci_upper,
-       slab = paste0(dat$study, ifelse(is.na(dat$ci_lower), " *", "")),
-       rows = c(3, 2), ylim = c(-1.5, 5),
-       xlab = "F1 (prognostic, single modality)", refline = NA,
-       psize = 1.1, header = "Study", mlab = "")
+## forest() de metafor descarta filas donde no puede calcular varianza (CI=NA),
+## así que Mirheidari (sin CI reportado) nunca se dibujaba con esa función.
+## Acá se arma a mano con gráficos base, con control total por fila.
+avg_est <- 0.7918
+avg_lo  <- 0.7591
+avg_hi  <- 0.8244
 
+xlim <- range(c(dat$auc, dat$ci_lower, dat$ci_upper, avg_lo, avg_hi), na.rm = TRUE) + c(-0.05, 0.05)
+study_rows <- nrow(dat):1  # de arriba hacia abajo, en el orden del CSV
+
+plot(NA, xlim = xlim, ylim = c(-1.5, nrow(dat) + 1), yaxt = "n",
+     xlab = "F1 (prognostic, single modality)", ylab = "", bty = "n")
+
+for (i in seq_len(nrow(dat))) {
+  y <- study_rows[i]
+  has_ci <- !is.na(dat$ci_lower[i]) && !is.na(dat$ci_upper[i])
+  if (has_ci) segments(dat$ci_lower[i], y, dat$ci_upper[i], y)
+  points(dat$auc[i], y, pch = 15, cex = 1.3)
+}
+
+axis(2, at = study_rows, labels = paste0(dat$study, ifelse(is.na(dat$ci_lower), " *", "")),
+     las = 1, tick = FALSE, cex.axis = 0.8, hadj = 1)
 mtext("* 95% CI not reported", side = 1, line = 4, adj = 0, cex = 0.7)
 
 ## --- Marcador gris con trama: promedio descriptivo no ponderado (k=2) ---
 ## Tomado tal cual del reporte (no se recalcula acá) -- ver nota sobre la
 ## discrepancia con el promedio aritmético simple (0.772) antes de publicarlo.
-avg_est <- 0.7918
-avg_lo  <- 0.7591
-avg_hi  <- 0.8244
 row_avg <- 0
-
 polygon(x = c(avg_lo, avg_est, avg_hi, avg_est),
         y = row_avg + c(0, 0.3, 0, -0.3),
         col = "grey85", border = "grey30", density = 20, angle = 45)
 
-text(par("usr")[1], row_avg, pos = 4, cex = 0.8,
+text(xlim[1], row_avg, pos = 4, cex = 0.8,
      "Descriptive average (unweighted, k=2) -- indicative only, not a formal meta-analysis")
 
 ## --- Tabla mínima ---
