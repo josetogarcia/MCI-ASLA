@@ -21,8 +21,13 @@ avg_hi  <- 0.8244
 
 xlim <- range(c(dat$auc, dat$ci_lower, dat$ci_upper, avg_lo, avg_hi), na.rm = TRUE) + c(-0.05, 0.05)
 study_rows <- nrow(dat):1  # de arriba hacia abajo, en el orden del CSV
+row_avg <- -1              # diamante separado, debajo de los estudios
 
-plot(NA, xlim = xlim, ylim = c(-1.5, nrow(dat) + 1), yaxt = "n",
+# Margen izquierdo generoso para que los nombres de estudio no se corten
+op <- par(mar = c(5, 16, 2, 2))
+on.exit(par(op), add = TRUE)
+
+plot(NA, xlim = xlim, ylim = c(row_avg - 1.3, nrow(dat) + 1), yaxt = "n",
      xlab = "F1 (prognostic, single modality)", ylab = "", bty = "n")
 
 for (i in seq_len(nrow(dat))) {
@@ -33,18 +38,17 @@ for (i in seq_len(nrow(dat))) {
 }
 
 axis(2, at = study_rows, labels = paste0(dat$study, ifelse(is.na(dat$ci_lower), " *", "")),
-     las = 1, tick = FALSE, cex.axis = 0.8, hadj = 1)
+     las = 1, tick = FALSE, cex.axis = 0.75, hadj = 1)
 mtext("* 95% CI not reported", side = 1, line = 4, adj = 0, cex = 0.7)
 
 ## --- Marcador gris con trama: promedio descriptivo no ponderado (k=2) ---
 ## Tomado tal cual del reporte (no se recalcula acá) -- ver nota sobre la
 ## discrepancia con el promedio aritmético simple (0.772) antes de publicarlo.
-row_avg <- 0
 polygon(x = c(avg_lo, avg_est, avg_hi, avg_est),
         y = row_avg + c(0, 0.3, 0, -0.3),
         col = "grey85", border = "grey30", density = 20, angle = 45)
 
-text(xlim[1], row_avg, pos = 4, cex = 0.8,
+text(xlim[1], row_avg - 0.9, pos = 4, cex = 0.75,
      "Descriptive average (unweighted, k=2) -- indicative only, not a formal meta-analysis")
 
 ## --- Tabla mínima ---
