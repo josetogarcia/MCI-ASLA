@@ -31,27 +31,34 @@ dat <- dat[order(dat$task_group), ]
 n_by_group    <- table(dat$task_group)
 pooled_groups <- names(n_by_group[n_by_group >= 2])
 
-# Recorre las categorías de abajo hacia arriba asignando filas, dejando un
-# hueco extra después de cada categoría que sí se pooled (para su diamante)
+# Recorre las categorías EN task_order (de arriba hacia abajo en la figura),
+# asignando filas con un contador que solo baja -- así el diamante de cada
+# subgrupo queda siempre inmediatamente bajo sus propios estudios, nunca
+# encima ni pisando la fila de otra categoría.
+counts          <- as.integer(n_by_group[task_order])
+extra_per_group <- ifelse(task_order %in% pooled_groups, 1L, 0L)  # fila del diamante
+total_rows      <- sum(counts) + sum(extra_per_group) + length(task_order)  # + huecos entre grupos
+
 rows <- integer(nrow(dat))
-cursor <- 1
 subgroup_models <- list()
 subgroup_row <- list()
+row_ptr <- total_rows
 
-for (g in rev(task_order)) {
+for (g in task_order) {
   idx <- which(dat$task_group == g)
-  if (length(idx) == 0) next
-  rows[idx] <- cursor + rev(seq_along(idx)) - 1
-  cursor <- cursor + length(idx)
+  n_g <- length(idx)
+  if (n_g == 0) next
+  rows[idx] <- row_ptr - seq_len(n_g) + 1
+  row_ptr <- row_ptr - n_g
   if (g %in% pooled_groups) {
     subgroup_models[[g]] <- rma(yi = auc, sei = se_calc, data = dat[idx, ], method = "DL")
-    subgroup_row[[g]] <- cursor
-    cursor <- cursor + 1
+    subgroup_row[[g]] <- row_ptr       # el diamante va justo bajo el último estudio del grupo
+    row_ptr <- row_ptr - 1
   }
-  cursor <- cursor + 1
+  row_ptr <- row_ptr - 1               # hueco antes de la siguiente categoría
 }
 
-overall_row <- -1.5  # separado del resto, debajo de todas las categorías
+overall_row <- min(rows) - 3  # separado del resto, debajo de todas las categorías
 
 ## --- Forest plot ---
 forest(dat$auc, sei = dat$se_calc, slab = dat$study,
@@ -67,3 +74,30 @@ for (g in names(subgroup_models)) {
 
 # Diamante rojo: estimado global (incluye las categorías de un solo estudio)
 addpoly(m_overall, row = overall_row, mlab = "Overall (DL)", col = "red")
+
+## --- Tabla resumen mínima ---
+fmt_est <- function(est, lb, ub) sprintf("%.2f [%.2f, %.2f]", est, lb, ub)
+
+single_study_rows <- do.call(rbind, lapply(setdiff(task_order, pooled_groups), function(g) {
+  r <- dat[dat$task_group == g, ]
+  data.frame(
+    Domain   = g,
+    Model    = paste0("Single study (", r$study, ")"),
+    k        = 1L,
+    Estimate = fmt_est(r$auc, r$auc - 1.96 * r$se_calc, r$auc + 1.96 * r$se_calc),
+    I2       = NA_character_
+  )
+}))
+
+summary_table <- rbind(
+  data.frame(Domain = "Block 1 (all task categories)", Model = "Overall (DL)",
+             k = nrow(dat), Estimate = fmt_est(m_overall$b[1], m_overall$ci.lb, m_overall$ci.ub),
+             I2 = sprintf("%.1f%%", m_overall$I2)),
+  do.call(rbind, lapply(names(subgroup_models), function(g) {
+    m <- subgroup_models[[g]]
+    data.frame(Domain = g, Model = "Subgroup pooled (DL)", k = m$k,
+               Estimate = fmt_est(m$b[1], m$ci.lb, m$ci.ub), I2 = sprintf("%.1f%%", m$I2))
+  })),
+  single_study_rows
+)
+print(summary_table, row.names = FALSE)
